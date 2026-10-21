@@ -1,266 +1,357 @@
 // src/app/page.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/Sidebar';
-import { Topbar } from '@/components/Topbar';
-import { DashboardView } from '@/components/DashboardView';
-import { OrganisationsView } from '@/components/OrganisationsView';
-import { ClientsView } from '@/components/ClientsView';
-import { MattersView } from '@/components/MattersView';
-import { DocumentsView } from '@/components/DocumentsView';
-import { TemplatesView } from '@/components/TemplatesView';
-import { ComplianceView } from '@/components/ComplianceView';
-import { GeneratedFormsView } from '@/components/GeneratedFormsView';
-import { AuditView } from '@/components/AuditView';
-import { SettingsView } from '@/components/SettingsView';
+import React, { useState } from 'react';
+import { StepIndicator, StepNumber } from '@/components/form-filler/StepIndicator';
+import { Step1UploadForm } from '@/components/form-filler/Step1UploadForm';
+import { Step2PeopleAndFields } from '@/components/form-filler/Step2PeopleAndFields';
+import { Step3UploadDocuments } from '@/components/form-filler/Step3UploadDocuments';
+import { Step4ScanningProgress } from '@/components/form-filler/Step4ScanningProgress';
+import { Step5ReviewChecklist } from '@/components/form-filler/Step5ReviewChecklist';
+import { Step6CheckDetails } from '@/components/form-filler/Step6CheckDetails';
+import { Step7GeneratePdf } from '@/components/form-filler/Step7GeneratePdf';
+import { FieldEditModal } from '@/components/form-filler/FieldEditModal';
 
 import { 
-  Organisation, 
-  Client, 
-  Matter, 
-  DocumentRecord, 
-  ExtractedField, 
-  PdfTemplate, 
-  GeneratedDocument 
-} from '@/types/database';
+  AnalyzedFormStructure, 
+  FormFieldValueState, 
+  UploadedSupportingDoc,
+  FormFieldDefinition
+} from '@/types/form-filler';
+import { FileText, Sparkles } from 'lucide-react';
 
 export default function HomePage() {
-  const [currentTab, setCurrentTab] = useState('dashboard');
-  const [organisations, setOrganisations] = useState<Organisation[]>([]);
-  const [activeOrg, setActiveOrg] = useState<Organisation | null>(null);
+  const [currentStep, setCurrentStep] = useState<StepNumber>(1);
 
-  const [clients, setClients] = useState<Client[]>([]);
-  const [matters, setMatters] = useState<Matter[]>([]);
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
-  const [extractedFields, setExtractedFields] = useState<ExtractedField[]>([]);
-  const [templates, setTemplates] = useState<PdfTemplate[]>([]);
-  const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocument[]>([]);
+  // Uploaded Form State
+  const [originalFormFile, setOriginalFormFile] = useState<File | null>(null);
+  const [originalPdfBase64, setOriginalPdfBase64] = useState<string>('');
+  const [formFileName, setFormFileName] = useState<string>('');
+  const [formStructure, setFormStructure] = useState<AnalyzedFormStructure | null>(null);
 
-  const [preselectedMatterId, setPreselectedMatterId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Supporting Documents State
+  const [supportingDocs, setSupportingDocs] = useState<UploadedSupportingDoc[]>([]);
 
-  // Load initial session & organisations
-  const loadSession = async () => {
-    try {
-      const res = await fetch('/api/auth/session');
-      const data = await res.json();
-      if (data.activeOrganisation) {
-        setActiveOrg(data.activeOrganisation);
-      }
-    } catch (err) {
-      console.error('Failed to load session:', err);
-    }
+  // Extracted Field Values State
+  const [fieldValues, setFieldValues] = useState<Record<string, FormFieldValueState>>({});
+  const [docSummaries, setDocSummaries] = useState<any[]>([]);
+
+  // Modal State for Step 6 direct edits
+  const [directEditingField, setDirectEditingField] = useState<{
+    field: FormFieldDefinition;
+    roleLabel?: string;
+  } | null>(null);
+
+  // Step 1: Blank form analyzed
+  const handleFormAnalyzed = (data: {
+    file: File | null;
+    fileBase64: string;
+    fileName: string;
+    structure: AnalyzedFormStructure;
+  }) => {
+    setOriginalFormFile(data.file);
+    setOriginalPdfBase64(data.fileBase64);
+    setFormFileName(data.fileName);
+    setFormStructure(data.structure);
+
+    // Initialize blank field values from structure
+    const initialValues: Record<string, FormFieldValueState> = {};
+    (data.structure.sharedFields || []).forEach(f => {
+      initialValues[f.id] = {
+        fieldId: f.id,
+        currentValue: null,
+        status: f.isRequired ? 'missing' : 'optional'
+      };
+    });
+    (data.structure.peopleRoles || []).forEach(r => {
+      ((data.structure.personFields && data.structure.personFields[r.id]) || []).forEach(f => {
+        initialValues[f.id] = {
+          fieldId: f.id,
+          personRoleId: r.id,
+          currentValue: null,
+          status: f.isRequired ? 'missing' : 'optional'
+        };
+      });
+    });
+
+    setFieldValues(initialValues);
+    setCurrentStep(2);
   };
 
-  const loadOrganisations = async () => {
-    try {
-      const res = await fetch('/api/organisations');
-      const data = await res.json();
-      if (data.organisations) {
-        setOrganisations(data.organisations);
-        if (!activeOrg && data.organisations.length > 0) {
-          setActiveOrg(data.organisations[0]);
+  // Step 2: Confirm structure & roles
+  const handleConfirmStructure = (updatedStructure: AnalyzedFormStructure) => {
+    setFormStructure(updatedStructure);
+    setCurrentStep(3);
+  };
+
+  // Step 3: Load sample docs helper
+  const handleLoadSampleDocs = () => {
+    if (!formStructure) return;
+    const sampleDocs: UploadedSupportingDoc[] = [
+      { id: 'sample_1', name: 'Sarah_Thompson_Drivers_Licence.pdf', size: 184500, assignedPersonRoleId: 'auto', status: 'ready' },
+      { id: 'sample_2', name: 'Sarah_Thompson_Official_Payslip.pdf', size: 215400, assignedPersonRoleId: 'auto', status: 'ready' },
+      { id: 'sample_3', name: 'Bank_Statement_Deposit_Schedule.pdf', size: 312000, assignedPersonRoleId: 'both', status: 'ready' }
+    ];
+
+    if (formStructure.peopleRoles.length > 1) {
+      sampleDocs.push(
+        { id: 'sample_4', name: 'David_Miller_Drivers_Licence.pdf', size: 195000, assignedPersonRoleId: formStructure.peopleRoles[1].id, status: 'ready' },
+        { id: 'sample_5', name: 'David_Miller_Official_Payslip.pdf', size: 228000, assignedPersonRoleId: formStructure.peopleRoles[1].id, status: 'ready' }
+      );
+    }
+
+    setSupportingDocs(sampleDocs);
+  };
+
+  // Step 4: Scan complete
+  const handleScanComplete = (
+    newFieldValues: Record<string, FormFieldValueState>,
+    summaries: any[]
+  ) => {
+    setFieldValues(newFieldValues);
+    setDocSummaries(summaries);
+    setCurrentStep(5);
+  };
+
+  // Step 5: Update a field value
+  const handleUpdateFieldValue = (fieldId: string, val: any, confirmed: boolean = false) => {
+    setFieldValues(prev => {
+      const existing = prev[fieldId] || { fieldId, currentValue: null, status: 'missing' };
+      return {
+        ...prev,
+        [fieldId]: {
+          ...existing,
+          currentValue: val,
+          status: confirmed ? 'confirmed' : 'manually_entered',
+          userConfirmed: confirmed,
+          conflicts: []
         }
-      }
-    } catch (err) {
-      console.error('Failed to load organisations:', err);
-    }
+      };
+    });
   };
 
-  // Load tenant-isolated data whenever activeOrg changes
-  const loadTenantData = async (orgId: string) => {
-    setLoading(true);
-    try {
-      // 1. Clients
-      const cRes = await fetch(`/api/clients?orgId=${orgId}`);
-      const cData = await cRes.json();
-      setClients(cData.clients || []);
-
-      // 2. Matters
-      const mRes = await fetch(`/api/matters?orgId=${orgId}`);
-      const mData = await mRes.json();
-      setMatters(mData.matters || []);
-
-      // 3. Documents
-      const dRes = await fetch(`/api/matters?orgId=${orgId}&matterId=${mData.matters?.[0]?.id || ''}`);
-      const dData = await dRes.json();
-      setDocuments(dData.documents || []);
-      setExtractedFields(dData.extractedFields || []);
-      setGeneratedDocs(dData.generatedDocs || []);
-
-      // 4. Templates
-      const tRes = await fetch(`/api/templates?orgId=${orgId}`);
-      const tData = await tRes.json();
-      setTemplates(tData.templates || []);
-    } catch (err) {
-      console.error('Error fetching tenant data:', err);
-    } finally {
-      setLoading(false);
-    }
+  // Step 5: Batch confirm all found values
+  const handleBatchConfirmFound = () => {
+    setFieldValues(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(k => {
+        if (updated[k].status === 'found') {
+          updated[k] = {
+            ...updated[k],
+            status: 'confirmed',
+            userConfirmed: true
+          };
+        }
+      });
+      return updated;
+    });
   };
 
-  useEffect(() => {
-    loadSession();
-    loadOrganisations();
-  }, []);
+  // Step 5: Upload additional document without restarting
+  const handleUploadAdditionalDoc = (files: File[]) => {
+    const newDocs: UploadedSupportingDoc[] = files.map(file => ({
+      id: `doc_extra_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      file,
+      name: file.name,
+      size: file.size,
+      assignedPersonRoleId: 'auto',
+      status: 'ready'
+    }));
 
-  useEffect(() => {
-    if (activeOrg) {
-      loadTenantData(activeOrg.id);
-    }
-  }, [activeOrg?.id]);
-
-  const handleSelectOrg = (orgId: string) => {
-    const target = organisations.find(o => o.id === orgId);
-    if (target) {
-      setActiveOrg(target);
-    }
+    setSupportingDocs(prev => [...prev, ...newDocs]);
+    // Transition straight to step 4 to scan and update missing fields!
+    setCurrentStep(4);
   };
 
-  const handleNavigate = (tab: string, meta?: any) => {
-    if (meta?.selectedMatterId) {
-      setPreselectedMatterId(meta.selectedMatterId);
-    }
-    setCurrentTab(tab);
+  // Navigation check
+  const canNavigateToStep = (step: StepNumber): boolean => {
+    if (step === 1) return true;
+    if (step === 2) return !!formStructure;
+    if (step === 3) return !!formStructure;
+    if (step === 4) return !!formStructure && supportingDocs.length > 0;
+    if (step === 5) return !!formStructure && Object.keys(fieldValues).length > 0;
+    if (step === 6) return !!formStructure && Object.keys(fieldValues).length > 0;
+    if (step === 7) return currentStep === 7;
+    return false;
   };
 
-  if (!activeOrg) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-primary)' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Loading Universal AI Platform...</p>
-      </div>
-    );
-  }
+  // Restart flow
+  const handleRestart = () => {
+    setCurrentStep(1);
+    setOriginalFormFile(null);
+    setOriginalPdfBase64('');
+    setFormFileName('');
+    setFormStructure(null);
+    setSupportingDocs([]);
+    setFieldValues({});
+    setDocSummaries([]);
+  };
 
   return (
-    <div className="app-container">
-      {/* Universal Navigation Sidebar */}
-      <Sidebar 
-        currentTab={currentTab}
-        onSelectTab={setCurrentTab}
-        orgName={activeOrg.branding?.product_name || activeOrg.name}
-        industryType={activeOrg.industry_type}
-        jurisdiction={activeOrg.jurisdiction}
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#0a0f1d',
+      color: '#f8fafc',
+      fontFamily: 'var(--font-sans)',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Top Header / Branding */}
+      <header style={{
+        backgroundColor: 'rgba(15, 23, 42, 0.85)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        padding: '14px 28px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        zIndex: 50
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, #38bdf8 0%, #2563eb 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ffffff',
+            boxShadow: '0 0 16px rgba(56, 189, 248, 0.4)'
+          }}>
+            <FileText size={20} />
+          </div>
+
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.01em' }}>
+              Universal Form Filler
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>
+              Form-First PDF Automation • Multi-Applicant Verification
+            </div>
+          </div>
+        </div>
+
+        {formStructure && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            backgroundColor: 'rgba(30, 41, 59, 0.6)',
+            padding: '6px 14px',
+            borderRadius: 8,
+            border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>Active Form:</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#38bdf8' }}>
+              {formStructure.formName}
+            </span>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 700,
+              backgroundColor: 'rgba(56, 189, 248, 0.15)',
+              color: '#38bdf8',
+              padding: '2px 6px',
+              borderRadius: 4
+            }}>
+              {formStructure.peopleRoles.length} Applicant(s)
+            </span>
+          </div>
+        )}
+      </header>
+
+      {/* Guided Progress Bar */}
+      <StepIndicator
+        currentStep={currentStep}
+        onStepClick={step => setCurrentStep(step)}
+        canNavigateToStep={canNavigateToStep}
       />
 
-      <div className="main-content">
-        {/* Global Topbar with Tenant Switcher */}
-        <Topbar 
-          organisations={organisations}
-          activeOrg={activeOrg}
-          onSelectOrg={handleSelectOrg}
-          userName="Alex Sterling"
-          userRole="org_owner"
-        />
+      {/* Main Content Area */}
+      <main style={{ flex: 1, paddingBottom: 60 }}>
+        {currentStep === 1 && (
+          <Step1UploadForm onFormAnalyzed={handleFormAnalyzed} />
+        )}
 
-        <main className="page-body">
-          {currentTab === 'dashboard' && (
-            <DashboardView 
-              clients={clients}
-              matters={matters}
-              documents={documents}
-              generatedDocs={generatedDocs}
-              onNavigate={handleNavigate}
-            />
-          )}
+        {currentStep === 2 && formStructure && (
+          <Step2PeopleAndFields
+            structure={formStructure}
+            fileName={formFileName}
+            onConfirmStructure={handleConfirmStructure}
+            onBackToUpload={() => setCurrentStep(1)}
+          />
+        )}
 
-          {currentTab === 'organisations' && (
-            <OrganisationsView 
-              organisations={organisations}
-              activeOrg={activeOrg}
-              onSelectOrg={handleSelectOrg}
-              onRefresh={() => {
-                loadOrganisations();
-                loadTenantData(activeOrg.id);
-              }}
-            />
-          )}
+        {currentStep === 3 && formStructure && (
+          <Step3UploadDocuments
+            formStructure={formStructure}
+            documents={supportingDocs}
+            onDocumentsChange={docs => setSupportingDocs(docs)}
+            onProceedToScan={() => setCurrentStep(4)}
+            onBack={() => setCurrentStep(2)}
+            onLoadSampleDocs={handleLoadSampleDocs}
+          />
+        )}
 
-          {currentTab === 'clients' && (
-            <ClientsView 
-              clients={clients}
-              activeOrgId={activeOrg.id}
-              onRefresh={() => loadTenantData(activeOrg.id)}
-              onNavigateToMatter={(clientId) => {
-                setCurrentTab('matters');
-              }}
-            />
-          )}
+        {currentStep === 4 && formStructure && (
+          <Step4ScanningProgress
+            formStructure={formStructure}
+            documents={supportingDocs}
+            existingValues={fieldValues}
+            onScanComplete={handleScanComplete}
+            onRetry={() => setCurrentStep(4)}
+            onBack={() => setCurrentStep(3)}
+          />
+        )}
 
-          {currentTab === 'matters' && (
-            <MattersView 
-              matters={matters}
-              clients={clients}
-              activeOrgId={activeOrg.id}
-              activeOrgIndustry={activeOrg.industry_type}
-              selectedMatterId={preselectedMatterId}
-              onRefresh={() => loadTenantData(activeOrg.id)}
-              onNavigateToDocumentUpload={(mId) => {
-                setPreselectedMatterId(mId);
-                setCurrentTab('documents');
-              }}
-              onNavigateToGenerate={(mId) => {
-                setPreselectedMatterId(mId);
-                setCurrentTab('generated');
-              }}
-            />
-          )}
+        {currentStep === 5 && formStructure && (
+          <Step5ReviewChecklist
+            formStructure={formStructure}
+            fieldValues={fieldValues}
+            onUpdateFieldValue={handleUpdateFieldValue}
+            onBatchConfirmFound={handleBatchConfirmFound}
+            onUploadAdditionalDoc={handleUploadAdditionalDoc}
+            onProceedToCheckAll={() => setCurrentStep(6)}
+            onBackToDocuments={() => setCurrentStep(3)}
+          />
+        )}
 
-          {currentTab === 'documents' && (
-            <DocumentsView 
-              documents={documents}
-              extractedFields={extractedFields}
-              matters={matters}
-              activeOrgId={activeOrg.id}
-              preselectedMatterId={preselectedMatterId}
-              onRefresh={() => loadTenantData(activeOrg.id)}
-            />
-          )}
+        {currentStep === 6 && formStructure && (
+          <Step6CheckDetails
+            formStructure={formStructure}
+            fieldValues={fieldValues}
+            onProceedToGenerate={() => setCurrentStep(7)}
+            onBackToReview={() => setCurrentStep(5)}
+            onEditField={(field, role) => setDirectEditingField({ field, roleLabel: role })}
+            onUploadMoreDocs={() => setCurrentStep(3)}
+          />
+        )}
 
-          {currentTab === 'templates' && (
-            <TemplatesView 
-              templates={templates}
-              activeOrgId={activeOrg.id}
-              onRefresh={() => loadTenantData(activeOrg.id)}
-            />
-          )}
+        {currentStep === 7 && formStructure && (
+          <Step7GeneratePdf
+            originalPdfBase64={originalPdfBase64}
+            originalPdfFile={originalFormFile}
+            formStructure={formStructure}
+            fieldValues={fieldValues}
+            onBackToReview={() => setCurrentStep(5)}
+            onRestart={handleRestart}
+          />
+        )}
 
-          {currentTab === 'compliance' && (
-            <ComplianceView 
-              matters={matters}
-              activeOrgId={activeOrg.id}
-              activeOrgIndustry={activeOrg.industry_type}
-              onRefresh={() => loadTenantData(activeOrg.id)}
-            />
-          )}
-
-          {currentTab === 'generated' && (
-            <GeneratedFormsView 
-              generatedDocs={generatedDocs}
-              matters={matters}
-              templates={templates}
-              activeOrgId={activeOrg.id}
-              preselectedMatterId={preselectedMatterId}
-              onRefresh={() => loadTenantData(activeOrg.id)}
-            />
-          )}
-
-          {currentTab === 'audit' && (
-            <AuditView activeOrgId={activeOrg.id} />
-          )}
-
-          {currentTab === 'settings' && (
-            <SettingsView 
-              activeOrg={activeOrg}
-              onRefresh={() => {
-                loadOrganisations();
-                loadTenantData(activeOrg.id);
-              }}
-            />
-          )}
-        </main>
-      </div>
+        {/* Modal for direct edits during Step 6 */}
+        {directEditingField && formStructure && (
+          <FieldEditModal
+            field={directEditingField.field}
+            state={fieldValues[directEditingField.field.id] || { fieldId: directEditingField.field.id, currentValue: null, status: 'missing' }}
+            roleLabel={directEditingField.roleLabel}
+            onSave={(fieldId, val, confirmed) => handleUpdateFieldValue(fieldId, val, confirmed)}
+            onClose={() => setDirectEditingField(null)}
+            onRequestUploadDoc={() => {
+              setDirectEditingField(null);
+              setCurrentStep(3);
+            }}
+          />
+        )}
+      </main>
     </div>
   );
 }

@@ -488,8 +488,16 @@ class PlatformDataRepository {
   }
 }
 
-// Global repository singleton
-const globalRepo = new PlatformDataRepository();
+// Global repository singleton attached to globalThis to preserve state across Next.js dev reloads
+declare global {
+  // eslint-disable-next-line no-var
+  var __platformRepo: PlatformDataRepository | undefined;
+}
+
+const globalRepo = globalThis.__platformRepo || new PlatformDataRepository();
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.__platformRepo = globalRepo;
+}
 
 export function getRepository(): PlatformDataRepository {
   return globalRepo;

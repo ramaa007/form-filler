@@ -19,6 +19,8 @@
 
 # Local env files
 .env*.local
+*.txt
+.env
 
 # Vercel
 .vercel

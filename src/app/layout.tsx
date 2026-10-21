@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'Universal AI Document Platform - Enterprise Automation & Compliance',
-  description: 'Universal multi-tenant AI PDF document automation, verification lineage, AcroForm & coordinate mapping, and regulatory compliance platform for Mortgage, Legal Conveyancing, and Real Estate.',
+  title: 'Universal Form Filler — Simple, Form-First PDF Auto-Fill',
+  description: 'Upload blank form first, detect required information and applicant roles, extract and match facts from supporting PDFs, resolve conflicts, validate, and download completed PDF.',
 };
 
 export default function RootLayout({

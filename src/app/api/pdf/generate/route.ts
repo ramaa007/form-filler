@@ -5,6 +5,16 @@ import { UniversalPdfEngine } from '@/lib/pdf/engine';
 import { GeneratedDocument } from '@/types/database';
 import { FlatCoordinatePlacement } from '@/types/pdf';
 
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const orgId = searchParams.get('orgId') || 'org-mortgage-prime';
+  const matterId = searchParams.get('matterId') || undefined;
+  const repo = getRepository();
+
+  const generatedDocs = repo.getGeneratedDocuments(orgId, matterId);
+  return NextResponse.json({ generatedDocs });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
