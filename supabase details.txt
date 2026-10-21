@@ -1,0 +1,7 @@
+Project Name: universal-ai-document-platform
+
+Project URL - https://zzmyozjmrzfjdnltmhdb.supabase.co
+
+Anon Key - eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6bXlvemptcnpmamRubHRtaGRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NDYzNDUsImV4cCI6MjEwODEyMjM0NX0.9irU9VEjccL64LS2y2WR8p5oXtERFlxI-Sq5ovfODOo
+
+
