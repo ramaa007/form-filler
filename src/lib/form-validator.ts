@@ -18,6 +18,7 @@ export class FormValidator {
   ): FormValidationSummary {
     let totalRequired = 0;
     let totalConfirmed = 0;
+    let totalSkipped = 0;
     let unresolvedCount = 0;
 
     // 1. Validate Shared Fields
@@ -25,14 +26,23 @@ export class FormValidator {
     const sharedConflicting: FormFieldDefinition[] = [];
     let sharedRequiredCount = 0;
     let sharedConfirmedCount = 0;
+    let sharedSkippedCount = 0;
 
     for (const field of formStructure.sharedFields) {
+      const state = fieldValues[field.id];
+      const isExplicitlySkipped = state?.status === 'skipped' || field.isSkipped === true;
+
+      if (isExplicitlySkipped) {
+        sharedSkippedCount++;
+        totalSkipped++;
+        continue;
+      }
+
       if (field.isRequired) {
         sharedRequiredCount++;
         totalRequired++;
       }
 
-      const state = fieldValues[field.id];
       const hasValue = state && state.currentValue !== null && state.currentValue !== undefined && String(state.currentValue).trim() !== '';
       const isConflicted = state && state.status === 'needs_review' && state.conflicts && state.conflicts.length > 1;
 
@@ -64,14 +74,23 @@ export class FormValidator {
       const conflicting: FormFieldDefinition[] = [];
       let roleRequired = 0;
       let roleConfirmed = 0;
+      let roleSkipped = 0;
 
       for (const field of pFields) {
+        const state = fieldValues[field.id];
+        const isExplicitlySkipped = state?.status === 'skipped' || field.isSkipped === true;
+
+        if (isExplicitlySkipped) {
+          roleSkipped++;
+          totalSkipped++;
+          continue;
+        }
+
         if (field.isRequired) {
           roleRequired++;
           totalRequired++;
         }
 
-        const state = fieldValues[field.id];
         const hasValue = state && state.currentValue !== null && state.currentValue !== undefined && String(state.currentValue).trim() !== '';
         const isConflicted = state && state.status === 'needs_review' && state.conflicts && state.conflicts.length > 1;
 
@@ -98,6 +117,7 @@ export class FormValidator {
         roleLabel: role.label,
         totalRequired: roleRequired,
         confirmedRequired: roleConfirmed,
+        skippedCount: roleSkipped,
         isComplete: (role.isOptional && roleConfirmed === 0) ? true : (missing.length === 0 && conflicting.length === 0),
         missingFields: missing,
         conflictingFields: conflicting
@@ -112,10 +132,12 @@ export class FormValidator {
       isValid,
       totalRequired,
       totalConfirmed,
+      totalSkipped,
       personStats,
       sharedStats: {
         totalRequired: sharedRequiredCount,
         confirmedRequired: sharedConfirmedCount,
+        skippedCount: sharedSkippedCount,
         isComplete: sharedComplete,
         missingFields: sharedMissing,
         conflictingFields: sharedConflicting

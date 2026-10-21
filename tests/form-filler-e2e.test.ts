@@ -243,4 +243,52 @@ describe('Form-First Universal PDF Auto-Fill — Complete End-to-End Workflow', 
       expect(sig.note).toContain('never fabricated');
     });
   });
+
+  // Test 20: Field selection & skip support according to client need
+  it('20: Supports skipping fields so unneeded information is cleanly skipped and satisfies validation', async () => {
+    const singleForm = await UniversalPdfEngine.createSampleForm('single_rental');
+    const structure = await FormAnalyzer.analyzeBlankForm(singleForm.buffer, singleForm.fileName);
+    const tenantRoleId = structure.peopleRoles[0].id;
+    const tenantFields = structure.personFields[tenantRoleId];
+
+    const values: Record<string, FormFieldValueState> = {};
+
+    // Confirm first required field
+    values[tenantFields[0].id] = {
+      fieldId: tenantFields[0].id,
+      currentValue: 'Sarah Thompson',
+      status: 'confirmed'
+    };
+
+    // Mark other required fields as explicitly skipped by user choice
+    for (let i = 1; i < tenantFields.length; i++) {
+      values[tenantFields[i].id] = {
+        fieldId: tenantFields[i].id,
+        currentValue: null,
+        status: 'skipped'
+      };
+    }
+
+    // Skip all shared fields
+    for (const sharedField of structure.sharedFields) {
+      values[sharedField.id] = {
+        fieldId: sharedField.id,
+        currentValue: null,
+        status: 'skipped'
+      };
+    }
+
+    // Validation should consider skipped fields as satisfied
+    const validation = FormValidator.validate(structure, values);
+    expect(validation.isValid).toBe(true);
+    expect(validation.totalSkipped).toBeGreaterThan(0);
+
+    // Generating PDF with skipped values succeeds without errors
+    const completedPdf = await UniversalPdfEngine.fillCompletedForm(
+      singleForm.buffer,
+      structure,
+      values
+    );
+    expect(completedPdf.length).toBeGreaterThan(1000);
+  });
 });

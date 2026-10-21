@@ -81,6 +81,31 @@ export default function HomePage() {
   // Step 2: Confirm structure & roles
   const handleConfirmStructure = (updatedStructure: AnalyzedFormStructure) => {
     setFormStructure(updatedStructure);
+
+    // Sync skipped / selected state from Step 2 into fieldValues
+    setFieldValues(prev => {
+      const next = { ...prev };
+      const allFields = [
+        ...updatedStructure.sharedFields,
+        ...Object.values(updatedStructure.personFields).flat()
+      ];
+
+      allFields.forEach(f => {
+        if (f.isSkipped) {
+          next[f.id] = {
+            ...(next[f.id] || { fieldId: f.id, currentValue: null }),
+            status: 'skipped'
+          };
+        } else if (next[f.id]?.status === 'skipped') {
+          next[f.id] = {
+            ...next[f.id],
+            status: f.isRequired ? 'missing' : 'optional'
+          };
+        }
+      });
+      return next;
+    });
+
     setCurrentStep(3);
   };
 
@@ -108,22 +133,45 @@ export default function HomePage() {
     newFieldValues: Record<string, FormFieldValueState>,
     summaries: any[]
   ) => {
-    setFieldValues(newFieldValues);
+    // Preserve any user-skipped fields from earlier steps
+    setFieldValues(prev => {
+      const merged = { ...newFieldValues };
+      Object.keys(prev).forEach(fieldId => {
+        if (prev[fieldId]?.status === 'skipped') {
+          merged[fieldId] = {
+            ...merged[fieldId],
+            status: 'skipped'
+          };
+        }
+      });
+      return merged;
+    });
     setDocSummaries(summaries);
     setCurrentStep(5);
   };
 
   // Step 5: Update a field value
-  const handleUpdateFieldValue = (fieldId: string, val: any, confirmed: boolean = false) => {
+  const handleUpdateFieldValue = (
+    fieldId: string, 
+    val: any, 
+    confirmed: boolean = false,
+    statusOverride?: 'found' | 'confirmed' | 'needs_review' | 'missing' | 'manually_entered' | 'optional' | 'skipped'
+  ) => {
     setFieldValues(prev => {
       const existing = prev[fieldId] || { fieldId, currentValue: null, status: 'missing' };
+      const status = statusOverride 
+        ? statusOverride 
+        : confirmed 
+        ? 'confirmed' 
+        : 'manually_entered';
+
       return {
         ...prev,
         [fieldId]: {
           ...existing,
           currentValue: val,
-          status: confirmed ? 'confirmed' : 'manually_entered',
-          userConfirmed: confirmed,
+          status,
+          userConfirmed: status === 'confirmed',
           conflicts: []
         }
       };
@@ -276,6 +324,7 @@ export default function HomePage() {
           <Step2PeopleAndFields
             structure={formStructure}
             fileName={formFileName}
+            originalPdfBase64={originalPdfBase64}
             onConfirmStructure={handleConfirmStructure}
             onBackToUpload={() => setCurrentStep(1)}
           />
@@ -307,6 +356,7 @@ export default function HomePage() {
           <Step5ReviewChecklist
             formStructure={formStructure}
             fieldValues={fieldValues}
+            originalPdfBase64={originalPdfBase64}
             onUpdateFieldValue={handleUpdateFieldValue}
             onBatchConfirmFound={handleBatchConfirmFound}
             onUploadAdditionalDoc={handleUploadAdditionalDoc}
@@ -322,6 +372,7 @@ export default function HomePage() {
             onProceedToGenerate={() => setCurrentStep(7)}
             onBackToReview={() => setCurrentStep(5)}
             onEditField={(field, role) => setDirectEditingField({ field, roleLabel: role })}
+            onSkipField={(fieldId) => handleUpdateFieldValue(fieldId, null, false, 'skipped')}
             onUploadMoreDocs={() => setCurrentStep(3)}
           />
         )}
@@ -344,6 +395,7 @@ export default function HomePage() {
             state={fieldValues[directEditingField.field.id] || { fieldId: directEditingField.field.id, currentValue: null, status: 'missing' }}
             roleLabel={directEditingField.roleLabel}
             onSave={(fieldId, val, confirmed) => handleUpdateFieldValue(fieldId, val, confirmed)}
+            onSkip={(fieldId) => handleUpdateFieldValue(fieldId, null, false, 'skipped')}
             onClose={() => setDirectEditingField(null)}
             onRequestUploadDoc={() => {
               setDirectEditingField(null);

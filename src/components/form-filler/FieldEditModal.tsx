@@ -23,6 +23,7 @@ interface FieldEditModalProps {
   state: FormFieldValueState;
   roleLabel?: string;
   onSave: (fieldId: string, value: any, confirmed: boolean) => void;
+  onSkip?: (fieldId: string) => void;
   onClose: () => void;
   onRequestUploadDoc: () => void;
 }
@@ -32,6 +33,7 @@ export const FieldEditModal: React.FC<FieldEditModalProps> = ({
   state,
   roleLabel,
   onSave,
+  onSkip,
   onClose,
   onRequestUploadDoc
 }) => {
@@ -45,6 +47,13 @@ export const FieldEditModal: React.FC<FieldEditModalProps> = ({
 
   const handleConfirm = () => {
     onSave(field.id, val, true);
+    onClose();
+  };
+
+  const handleSkip = () => {
+    if (onSkip) {
+      onSkip(field.id);
+    }
     onClose();
   };
 
@@ -241,6 +250,25 @@ export const FieldEditModal: React.FC<FieldEditModalProps> = ({
             </button>
 
             <div style={{ display: 'flex', gap: 10 }}>
+              {onSkip && (
+                <button
+                  type="button"
+                  onClick={handleSkip}
+                  style={{
+                    backgroundColor: 'rgba(100, 116, 139, 0.15)',
+                    color: '#94a3b8',
+                    border: '1px solid rgba(100, 116, 139, 0.3)',
+                    borderRadius: 6,
+                    padding: '8px 14px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Skip Field (Leave Blank)
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={onClose}

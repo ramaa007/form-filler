@@ -14,6 +14,8 @@ export interface FormFieldDefinition {
   targetAcroFieldName?: string; // Matching PDF AcroForm field name if interactive
   type: 'text' | 'date' | 'number' | 'currency' | 'phone' | 'email' | 'checkbox' | 'select' | 'signature';
   isRequired: boolean;
+  isSkipped?: boolean; // User chose to skip or leave blank
+  isSelected?: boolean; // User selection state for filling
   description?: string;
   options?: string[]; // for select/checkbox/radio
   pageNumber?: number;
@@ -50,7 +52,8 @@ export type FieldStatus =
   | 'needs_review'     // Unclear or conflicting
   | 'missing'          // Not found in any document
   | 'manually_entered' // User typed or corrected
-  | 'optional';        // Optional field not present
+  | 'optional'         // Optional field not present
+  | 'skipped';         // Explicitly skipped by user choice (left blank)
 
 export interface FieldConflictOption {
   value: string;
@@ -88,11 +91,13 @@ export interface FormValidationSummary {
   isValid: boolean;
   totalRequired: number;
   totalConfirmed: number;
+  totalSkipped: number;
   personStats: Array<{
     roleId: string;
     roleLabel: string;
     totalRequired: number;
     confirmedRequired: number;
+    skippedCount: number;
     isComplete: boolean;
     missingFields: FormFieldDefinition[];
     conflictingFields: FormFieldDefinition[];
@@ -100,9 +105,11 @@ export interface FormValidationSummary {
   sharedStats: {
     totalRequired: number;
     confirmedRequired: number;
+    skippedCount: number;
     isComplete: boolean;
     missingFields: FormFieldDefinition[];
     conflictingFields: FormFieldDefinition[];
   };
   unresolvedCount: number;
 }
+

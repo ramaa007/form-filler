@@ -218,7 +218,7 @@ export class UniversalPdfEngine {
 
     for (const fieldDef of allFields) {
       const state = fieldValues[fieldDef.id];
-      if (!state || state.currentValue === null || state.currentValue === undefined || state.currentValue === '') {
+      if (fieldDef.isSkipped || fieldDef.isSelected === false || !state || state.status === 'skipped' || state.currentValue === null || state.currentValue === undefined || state.currentValue === '') {
         continue;
       }
 

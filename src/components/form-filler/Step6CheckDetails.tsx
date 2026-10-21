@@ -13,7 +13,9 @@ import {
   FileCheck,
   Users,
   Layers,
-  Sparkles
+  Sparkles,
+  MinusCircle,
+  FileText
 } from 'lucide-react';
 import { 
   AnalyzedFormStructure, 
@@ -29,6 +31,7 @@ interface Step6CheckDetailsProps {
   onProceedToGenerate: () => void;
   onBackToReview: () => void;
   onEditField: (field: FormFieldDefinition, roleLabel?: string) => void;
+  onSkipField?: (fieldId: string) => void;
   onUploadMoreDocs: () => void;
 }
 
@@ -38,6 +41,7 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
   onProceedToGenerate,
   onBackToReview,
   onEditField,
+  onSkipField,
   onUploadMoreDocs
 }) => {
   const summary: FormValidationSummary = useMemo(() => {
@@ -77,11 +81,11 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
         <p style={{
           fontSize: 16,
           color: '#94a3b8',
-          maxWidth: 620,
+          maxWidth: 640,
           margin: '0 auto',
           lineHeight: 1.6
         }}>
-          Verifying that all required fields are confirmed across every applicant and shared section with zero unresolved conflicts.
+          Review form readiness before generating. Any remaining missing fields can either be filled manually or skipped to leave them blank.
         </p>
       </div>
 
@@ -113,10 +117,11 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
 
           <div>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: '#34d399' }}>
-              All required information is ready. You can now generate your completed form.
+              All selected information is ready. You can now generate your completed form.
             </h3>
             <p style={{ fontSize: 13, color: '#d1fae5', marginTop: 4 }}>
-              Total {summary.totalConfirmed} of {summary.totalRequired} required fields confirmed across {formStructure.peopleRoles.length} applicant(s) and shared sections.
+              Total {summary.totalConfirmed} of {summary.totalRequired} active required fields satisfied across {formStructure.peopleRoles.length} applicant(s) and shared sections
+              {summary.totalSkipped > 0 ? ` (${summary.totalSkipped} fields skipped by choice)` : ''}.
             </p>
           </div>
         </div>
@@ -150,7 +155,7 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
               Some required details still need your attention
             </h3>
             <p style={{ fontSize: 13, color: '#fef3c7', marginTop: 4 }}>
-              {summary.totalConfirmed} of {summary.totalRequired} required fields confirmed. Complete the missing details or resolve conflicting documents below.
+              {summary.totalConfirmed} of {summary.totalRequired} required fields confirmed. Fill in remaining details, upload more documents, or click <strong>Skip Field</strong> to leave them blank.
             </p>
           </div>
         </div>
@@ -185,8 +190,14 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
             </div>
 
             <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginBottom: 8 }}>
-              {stat.confirmedRequired} <span style={{ fontSize: 15, color: '#94a3b8', fontWeight: 500 }}>of {stat.totalRequired} required fields</span>
+              {stat.confirmedRequired} <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 500 }}>of {stat.totalRequired} required</span>
             </div>
+
+            {stat.skippedCount > 0 && (
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <MinusCircle size={12} /> {stat.skippedCount} skipped by choice
+              </div>
+            )}
 
             {/* Progress Bar */}
             <div style={{
@@ -247,8 +258,14 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
             </div>
 
             <div style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginBottom: 8 }}>
-              {summary.sharedStats.confirmedRequired} <span style={{ fontSize: 15, color: '#94a3b8', fontWeight: 500 }}>of {summary.sharedStats.totalRequired} required fields</span>
+              {summary.sharedStats.confirmedRequired} <span style={{ fontSize: 14, color: '#94a3b8', fontWeight: 500 }}>of {summary.sharedStats.totalRequired} required</span>
             </div>
+
+            {summary.sharedStats.skippedCount > 0 && (
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <MinusCircle size={12} /> {summary.sharedStats.skippedCount} skipped by choice
+              </div>
+            )}
 
             <div style={{
               width: '100%',
@@ -278,17 +295,21 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
       {/* Outstanding Items Action Box (if incomplete) */}
       {!summary.isValid && (
         <div style={{
-          backgroundColor: 'rgba(22, 32, 50, 0.5)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          backgroundColor: 'rgba(22, 32, 50, 0.65)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
           borderRadius: 12,
           padding: '20px 24px',
           marginBottom: 32
         }}>
-          <h4 style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 12 }}>
+          <h4 style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 8 }}>
             Resolve Remaining Items:
           </h4>
+          <p style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14 }}>
+            Click <strong>Fill</strong> to provide a value or <strong>Skip</strong> to leave it blank without guessing.
+          </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Person Missing Fields */}
             {summary.personStats.flatMap(p => p.missingFields.map(f => ({ field: f, role: p.roleLabel }))).map(({ field, role }) => (
               <div
                 key={field.id}
@@ -296,32 +317,127 @@ export const Step6CheckDetails: React.FC<Step6CheckDetailsProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: '8px 12px',
-                  backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                  borderRadius: 6
+                  padding: '10px 14px',
+                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                  borderRadius: 8,
+                  flexWrap: 'wrap',
+                  gap: 10
                 }}
               >
                 <div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#f87171' }}>{role}</span>
-                  <span style={{ fontSize: 13, color: '#e2e8f0', marginLeft: 8 }}>{field.label}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>{role}</span>
+                  <span style={{ fontSize: 13, color: '#f8fafc', marginLeft: 8, fontWeight: 600 }}>{field.label}</span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => onEditField(field, role)}
-                  style={{
-                    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    color: '#38bdf8',
-                    borderRadius: 6,
-                    padding: '4px 10px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Fill Manually
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => onEditField(field, role)}
+                    style={{
+                      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      borderRadius: 6,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <Edit3 size={12} /> Fill Value
+                  </button>
+
+                  {onSkipField && (
+                    <button
+                      type="button"
+                      onClick={() => onSkipField(field.id)}
+                      style={{
+                        backgroundColor: 'rgba(100, 116, 139, 0.15)',
+                        border: '1px solid rgba(100, 116, 139, 0.3)',
+                        color: '#94a3b8',
+                        borderRadius: 6,
+                        padding: '5px 12px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <MinusCircle size={12} /> Skip (Leave Blank)
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Shared Missing Fields */}
+            {summary.sharedStats.missingFields.map(field => (
+              <div
+                key={field.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                  borderRadius: 8,
+                  flexWrap: 'wrap',
+                  gap: 10
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>Shared</span>
+                  <span style={{ fontSize: 13, color: '#f8fafc', marginLeft: 8, fontWeight: 600 }}>{field.label}</span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => onEditField(field, 'Shared')}
+                    style={{
+                      backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      borderRadius: 6,
+                      padding: '5px 12px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <Edit3 size={12} /> Fill Value
+                  </button>
+
+                  {onSkipField && (
+                    <button
+                      type="button"
+                      onClick={() => onSkipField(field.id)}
+                      style={{
+                        backgroundColor: 'rgba(100, 116, 139, 0.15)',
+                        border: '1px solid rgba(100, 116, 139, 0.3)',
+                        color: '#94a3b8',
+                        borderRadius: 6,
+                        padding: '5px 12px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      <MinusCircle size={12} /> Skip (Leave Blank)
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
