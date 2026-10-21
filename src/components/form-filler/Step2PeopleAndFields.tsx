@@ -38,6 +38,20 @@ export const Step2PeopleAndFields: React.FC<Step2PeopleAndFieldsProps> = ({
   const [structure, setStructure] = useState<AnalyzedFormStructure>(initialStructure);
   const [newRoleLabel, setNewRoleLabel] = useState('');
   const [showAddRole, setShowAddRole] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'required' | 'optional'>('all');
+
+  // Calculate field counts
+  const totalCount = structure.sharedFields.length + 
+    Object.values(structure.personFields).reduce((acc, f) => acc + f.length, 0);
+  const requiredCount = structure.sharedFields.filter(f => f.isRequired).length + 
+    Object.values(structure.personFields).reduce((acc, f) => acc + f.filter(x => x.isRequired).length, 0);
+  const optionalCount = totalCount - requiredCount;
+
+  const visibleSharedFields = structure.sharedFields.filter(f => {
+    if (filterMode === 'required') return f.isRequired;
+    if (filterMode === 'optional') return !f.isRequired;
+    return true;
+  });
 
   // Edit role label
   const handleRoleLabelChange = (roleId: string, newLabel: string) => {
@@ -303,18 +317,76 @@ export const Step2PeopleAndFields: React.FC<Step2PeopleAndFieldsProps> = ({
         padding: '24px',
         marginBottom: 32
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <FileCheck size={18} color="#10b981" />
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
-            Dynamic Form Checklist ({
-              structure.sharedFields.length + 
-              Object.values(structure.personFields).reduce((acc, f) => acc + f.length, 0)
-            } Required & Optional Fields)
-          </h2>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+          gap: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileCheck size={18} color="#10b981" />
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
+              Dynamic Form Checklist ({requiredCount} Required • {optionalCount} Optional)
+            </h2>
+          </div>
+
+          {/* Filter Pills */}
+          <div style={{ display: 'flex', gap: 6, backgroundColor: 'rgba(15, 23, 42, 0.6)', padding: 4, borderRadius: 20 }}>
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              style={{
+                backgroundColor: filterMode === 'all' ? '#2563eb' : 'transparent',
+                color: filterMode === 'all' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: 16,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              All ({totalCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('required')}
+              style={{
+                backgroundColor: filterMode === 'required' ? '#ef4444' : 'transparent',
+                color: filterMode === 'required' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: 16,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Required Only ({requiredCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('optional')}
+              style={{
+                backgroundColor: filterMode === 'optional' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                color: filterMode === 'optional' ? '#ffffff' : '#94a3b8',
+                border: 'none',
+                borderRadius: 16,
+                padding: '4px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Optional ({optionalCount})
+            </button>
+          </div>
         </div>
 
         {/* 1. Shared Fields */}
-        {structure.sharedFields.length > 0 && (
+        {visibleSharedFields.length > 0 && (
           <div style={{ marginBottom: 24 }}>
             <div style={{
               fontSize: 13,
@@ -325,12 +397,17 @@ export const Step2PeopleAndFields: React.FC<Step2PeopleAndFieldsProps> = ({
               marginBottom: 10,
               display: 'flex',
               alignItems: 'center',
-              gap: 6
+              justifyContent: 'space-between'
             }}>
-              <Layers size={14} /> Shared Application Details ({structure.sharedFields.length})
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Layers size={14} /> Shared Property & Listing Details ({structure.sharedFields.length})
+              </span>
+              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+                {structure.sharedFields.filter(f => f.isRequired).length} Required • {structure.sharedFields.filter(f => !f.isRequired).length} Optional
+              </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
-              {structure.sharedFields.map(field => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 8 }}>
+              {visibleSharedFields.map(field => (
                 <div
                   key={field.id}
                   style={{
@@ -345,13 +422,16 @@ export const Step2PeopleAndFields: React.FC<Step2PeopleAndFieldsProps> = ({
                     justifyContent: 'space-between'
                   }}
                 >
-                  <span>{field.label}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
+                    {field.label}
+                  </span>
                   <span style={{
                     fontSize: 10,
                     fontWeight: 600,
                     padding: '2px 6px',
                     borderRadius: 4,
-                    backgroundColor: field.isRequired ? 'rgba(239, 68, 68, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                    flexShrink: 0,
+                    backgroundColor: field.isRequired ? 'rgba(239, 68, 68, 0.15)' : 'rgba(148, 163, 184, 0.12)',
                     color: field.isRequired ? '#f87171' : '#94a3b8'
                   }}>
                     {field.isRequired ? 'Required' : 'Optional'}
@@ -365,6 +445,16 @@ export const Step2PeopleAndFields: React.FC<Step2PeopleAndFieldsProps> = ({
         {/* 2. Individual People Fields */}
         {structure.peopleRoles.map(role => {
           const fields = structure.personFields[role.id] || [];
+          const reqInRole = fields.filter(f => f.isRequired).length;
+          const optInRole = fields.length - reqInRole;
+          const visibleFields = fields.filter(f => {
+            if (filterMode === 'required') return f.isRequired;
+            if (filterMode === 'optional') return !f.isRequired;
+            return true;
+          });
+
+          if (visibleFields.length === 0 && filterMode !== 'all') return null;
+
           return (
             <div key={role.id} style={{ marginBottom: 20 }}>
               <div style={{
@@ -372,16 +462,21 @@ export const Step2PeopleAndFields: React.FC<Step2PeopleAndFieldsProps> = ({
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
-                color: '#60a5fa',
+                color: role.isOptional ? '#94a3b8' : '#60a5fa',
                 marginBottom: 10,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6
+                justifyContent: 'space-between'
               }}>
-                <Users size={14} /> {role.label.toUpperCase()} ({fields.length} Fields)
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Users size={14} /> {role.label.toUpperCase()} {role.isOptional ? '(OPTIONAL CO-APPLICANT)' : ''}
+                </span>
+                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+                  {reqInRole} Required • {optInRole} Optional
+                </span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
-                {fields.map(field => (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 8 }}>
+                {visibleFields.map(field => (
                   <div
                     key={field.id}
                     style={{
@@ -396,13 +491,16 @@ export const Step2PeopleAndFields: React.FC<Step2PeopleAndFieldsProps> = ({
                       justifyContent: 'space-between'
                     }}
                   >
-                    <span>{field.label}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 8 }}>
+                      {field.label}
+                    </span>
                     <span style={{
                       fontSize: 10,
                       fontWeight: 600,
                       padding: '2px 6px',
                       borderRadius: 4,
-                      backgroundColor: field.isRequired ? 'rgba(239, 68, 68, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                      flexShrink: 0,
+                      backgroundColor: field.isRequired ? 'rgba(239, 68, 68, 0.15)' : 'rgba(148, 163, 184, 0.12)',
                       color: field.isRequired ? '#f87171' : '#94a3b8'
                     }}>
                       {field.isRequired ? 'Required' : 'Optional'}

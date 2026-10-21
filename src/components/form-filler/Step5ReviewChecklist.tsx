@@ -52,6 +52,19 @@ export const Step5ReviewChecklist: React.FC<Step5ReviewChecklistProps> = ({
   } | null>(null);
 
   const [showAddDocDrawer, setShowAddDocDrawer] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'required' | 'attention'>('all');
+
+  // Compute field statistics
+  const allFormFields = [
+    ...formStructure.sharedFields,
+    ...Object.values(formStructure.personFields).flat()
+  ];
+  const totalCount = allFormFields.length;
+  const requiredCount = allFormFields.filter(f => f.isRequired).length;
+  const attentionCount = allFormFields.filter(f => {
+    const s = fieldValues[f.id];
+    return s?.status === 'needs_review' || (f.isRequired && (!s || s.status === 'missing' || !s.currentValue));
+  }).length;
 
   // Status badge style helper
   const getStatusBadge = (status: FieldStatus) => {
@@ -257,9 +270,88 @@ export const Step5ReviewChecklist: React.FC<Step5ReviewChecklistProps> = ({
         </div>
       )}
 
+      {/* Filter Bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: 'rgba(22, 32, 50, 0.7)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: 12,
+        padding: '12px 18px',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 10
+      }}>
+        <div style={{ fontSize: 13, color: '#94a3b8' }}>
+          Filter Review List:
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setFilterMode('all')}
+            style={{
+              backgroundColor: filterMode === 'all' ? '#2563eb' : 'rgba(15, 23, 42, 0.6)',
+              color: filterMode === 'all' ? '#ffffff' : '#94a3b8',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 16,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            All Fields ({totalCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('required')}
+            style={{
+              backgroundColor: filterMode === 'required' ? '#ef4444' : 'rgba(15, 23, 42, 0.6)',
+              color: filterMode === 'required' ? '#ffffff' : '#94a3b8',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 16,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Required Only ({requiredCount})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('attention')}
+            style={{
+              backgroundColor: filterMode === 'attention' ? '#f59e0b' : 'rgba(15, 23, 42, 0.6)',
+              color: filterMode === 'attention' ? '#ffffff' : '#94a3b8',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: 16,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Needs Attention ({attentionCount})
+          </button>
+        </div>
+      </div>
+
       {/* SECTION 1: PEOPLE / APPLICANT DETAILS */}
       {formStructure.peopleRoles.map(role => {
         const fields = formStructure.personFields[role.id] || [];
+        const visibleFields = fields.filter(field => {
+          const state = fieldValues[field.id];
+          if (filterMode === 'required') return field.isRequired;
+          if (filterMode === 'attention') {
+            return state?.status === 'needs_review' || (field.isRequired && (!state || state.status === 'missing' || !state.currentValue));
+          }
+          return true;
+        });
+
+        if (visibleFields.length === 0 && filterMode !== 'all') return null;
+
         return (
           <div
             key={role.id}
@@ -279,7 +371,7 @@ export const Step5ReviewChecklist: React.FC<Step5ReviewChecklistProps> = ({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {fields.map(field => {
+              {visibleFields.map(field => {
                 const state = fieldValues[field.id] || {
                   fieldId: field.id,
                   currentValue: null,
@@ -398,29 +490,41 @@ export const Step5ReviewChecklist: React.FC<Step5ReviewChecklistProps> = ({
       })}
 
       {/* SECTION 2: SHARED APPLICATION DETAILS */}
-      {formStructure.sharedFields.length > 0 && (
-        <div style={{
-          backgroundColor: 'rgba(22, 32, 50, 0.7)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: 14,
-          padding: '24px',
-          marginBottom: 32
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Layers size={18} color="#38bdf8" />
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
-              SHARED APPLICATION DETAILS
-            </h2>
-          </div>
+      {(() => {
+        const visibleSharedFields = formStructure.sharedFields.filter(field => {
+          const state = fieldValues[field.id];
+          if (filterMode === 'required') return field.isRequired;
+          if (filterMode === 'attention') {
+            return state?.status === 'needs_review' || (field.isRequired && (!state || state.status === 'missing' || !state.currentValue));
+          }
+          return true;
+        });
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {formStructure.sharedFields.map(field => {
-              const state = fieldValues[field.id] || {
-                fieldId: field.id,
-                currentValue: null,
-                status: field.isRequired ? 'missing' : 'optional'
-              };
-              const badge = getStatusBadge(state.status);
+        if (visibleSharedFields.length === 0 && filterMode !== 'all') return null;
+
+        return (
+          <div style={{
+            backgroundColor: 'rgba(22, 32, 50, 0.7)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 14,
+            padding: '24px',
+            marginBottom: 32
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <Layers size={18} color="#38bdf8" />
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>
+                SHARED PROPERTY & LISTING DETAILS
+              </h2>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {visibleSharedFields.map(field => {
+                const state = fieldValues[field.id] || {
+                  fieldId: field.id,
+                  currentValue: null,
+                  status: field.isRequired ? 'missing' : 'optional'
+                };
+                const badge = getStatusBadge(state.status);
 
               return (
                 <div
@@ -528,7 +632,8 @@ export const Step5ReviewChecklist: React.FC<Step5ReviewChecklistProps> = ({
             })}
           </div>
         </div>
-      )}
+      );
+    })()}
 
       {/* Navigation Buttons */}
       <div style={{

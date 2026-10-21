@@ -98,7 +98,7 @@ export class FormValidator {
         roleLabel: role.label,
         totalRequired: roleRequired,
         confirmedRequired: roleConfirmed,
-        isComplete: missing.length === 0 && conflicting.length === 0,
+        isComplete: (role.isOptional && roleConfirmed === 0) ? true : (missing.length === 0 && conflicting.length === 0),
         missingFields: missing,
         conflictingFields: conflicting
       });
